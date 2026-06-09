@@ -1,49 +1,100 @@
 <!DOCTYPE html>
-<html>
-<style>
-	html, body {
-	  margin: 0;
-	  padding: 0;
-	}
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>WebRTC Test</title>
+	<style>
+		html, body {
+			margin: 0;
+			padding: 0;
+			font-family: BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+			font-size: 18px;
+			background: #f9f9f9;
+		}
 
-	#main {
-	  width: 90vw;
-	  height: 90vh;
-	  position: relative;
-	  border: 1px solid black;
-	}
+		#main {
+			width: 90vw;
+			height: 85vh;
+			position: relative;
+			border: 2px solid #333;
+			margin: 15px auto;
+			padding: 15px;
+			box-sizing: border-box;
+			background: white;
+			border-radius: 8px;
+			overflow: hidden;
+		}
 
-	#remoteCursor {
-	  position: absolute;
-	  width: 10px;
-	  height: 10px;
-	  background: red;
-	  border-radius: 50%;
-	  pointer-events:none;
-	  transition: left 50ms linear, top 50ms linear;
-	}
-</style>
+		.row {
+			margin-bottom: 15px;
+			display: flex;
+			gap: 10px;
+		}
 
+		button, input {
+			font-size: 16px;
+			padding: 12px 20px;
+			border-radius: 6px;
+			border: 1px solid #ccc;
+		}
+
+		button {
+			background-color: #0070f3;
+			color: white;
+			border: none;
+			font-weight: bold;
+			cursor: pointer;
+		}
+
+		button:active {
+			background-color: #0051b3;
+		}
+
+		input {
+			flex-grow: 1;
+		}
+
+		#chat {
+			margin-top: 15px;
+			max-height: 40%;
+			overflow-y: auto;
+			border-top: 1px solid #eee;
+			padding-top: 10px;
+			font-family: monospace;
+			word-break: break-word;
+		}
+
+		#remoteCursor {
+			position: absolute;
+			width: 14px;
+			height: 14px;
+			background: red;
+			border-radius: 50%;
+			pointer-events: none;
+			transition: left 50ms linear, top 50ms linear;
+			z-index: 9999;
+		}
+	</style>
+</head>
 <body>
 
 <div id="main">
-	<div>
+	<div class="row">
 		<button id="connect">Connect</button>
 	</div>
 
-	<div>
-		<input id="msg">
+	<div class="row">
+		<input id="msg" placeholder="...">
 		<button id="send">Send</button>
 	</div>
 
 	<div id="chat"></div>
 
-	<div id="remoteCursor">
-	</div>
+	<div id="remoteCursor"></div>
 </div>
 
 <script>
-
 const ws = new WebSocket("wss://p01--roguelikeserver--by4b98kql5cr.code.run");
 
 const pc = new RTCPeerConnection({
@@ -59,6 +110,7 @@ const mainDiv = document.getElementById("main");
 
 function add(text){
 	chat.innerHTML += `<div>${text}</div>`;
+	chat.scrollTop = chat.scrollHeight;
 }
 
 let isMaster = false;
@@ -138,6 +190,7 @@ ws.onmessage = async ({ data }) => {
 document.getElementById("send").onclick = () => {
 
 	const text = document.getElementById("msg").value;
+	if(!text) return;
 
 	ws.send(JSON.stringify({
 		type: "chat",
@@ -145,6 +198,7 @@ document.getElementById("send").onclick = () => {
 	}));
 
 	add("Me: " + text);
+	document.getElementById("msg").value = "";
 };
 
 const CURSOR_SCALE = 1000;
@@ -189,6 +243,7 @@ function animate() {
 	posX += velX;
 	posY += velY;
 
+	const remoteCursor = document.getElementById("remoteCursor");
 	remoteCursor.style.left = posX + "px";
 	remoteCursor.style.top = posY + "px";
 
@@ -203,8 +258,6 @@ let mouseY = 0;
 let lastSentX = 0;
 let lastSentY = 0;
 
-
-
 document.addEventListener("pointermove", e => {
 	const rect = mainDiv.getBoundingClientRect();
 
@@ -213,7 +266,6 @@ document.addEventListener("pointermove", e => {
 });
 
 setInterval(sendCursor, 1000 / CURSOR_FPS);
-
 
 function sendCursor() {
   if (!channel || channel.readyState !== "open") return;
@@ -236,9 +288,6 @@ function sendCursor() {
 
 	channel.send(buf);
 }
-
-
-
 </script>
 
 </body>
