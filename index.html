@@ -97,12 +97,7 @@
 <script>
 const ws = new WebSocket("wss://p01--roguelikeserver--by4b98kql5cr.code.run");
 
-const pc = new RTCPeerConnection({
-	iceServers: [
-		{ urls: "stun:stun.l.google.com:19302" }
-	]
-});
-
+let pc;
 let channel;
 
 const chat = document.getElementById("chat");
@@ -140,23 +135,54 @@ document.getElementById("connect").onclick = async () => {
 	}));
 };
 
-pc.ondatachannel = e => {
-	channel = e.channel;
-	setupChannel(channel);
-};
-
-pc.onicecandidate = e => {
-	if (e.candidate) {
-		ws.send(JSON.stringify({
-			type: "candidate",
-			candidate: e.candidate
-		}));
-	}
-};
-
 ws.onmessage = async ({ data }) => {
 
 	const msg = JSON.parse(data);
+
+	if (msg.type === "credentials" && !pc) {
+		pc = new RTCPeerConnection({
+			iceServers: [
+				{
+					urls: "stun:stun.relay.metered.ca:80",
+				},
+				{
+					urls: "turn:standard.relay.metered.ca:80",
+					username: "3abeebe28255795c85bdd6d5",
+					credential: msg.credential,
+				},
+				{
+					urls: "turn:standard.relay.metered.ca:80?transport=tcp",
+					username: "3abeebe28255795c85bdd6d5",
+					credential: msg.credential,
+				},
+				{
+					urls: "turn:standard.relay.metered.ca:443",
+					username: "3abeebe28255795c85bdd6d5",
+					credential: msg.credential,
+				},
+				{
+					urls: "turns:standard.relay.metered.ca:443?transport=tcp",
+					username: "3abeebe28255795c85bdd6d5",
+					credential: msg.credential,
+				},
+			],
+		});
+
+		pc.ondatachannel = e => {
+			channel = e.channel;
+			setupChannel(channel);
+		};
+
+		pc.onicecandidate = e => {
+			if (e.candidate) {
+				ws.send(JSON.stringify({
+					type: "candidate",
+					candidate: e.candidate
+				}));
+			}
+		};
+		return;
+	}
 
 	if (msg.type === "chat") {
 		add("Peer: " + msg.text);
