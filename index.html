@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<style>
+	html, body {
+	  margin: 0;
+	  padding: 0;
+	}
+
+	#main {
+	  width: 90vw;
+	  height: 90vh;
+	  position: relative;
+	  border: 1px solid black;
+	}
+
+	#remoteCursor {
+	  position: absolute;
+	  width: 10px;
+	  height: 10px;
+	  background: red;
+	  border-radius: 50%;
+	  pointer-events:none;
+	  transition: left 50ms linear, top 50ms linear;
+	}
+</style>
+
+<body>
+
+<div id="main">
+	<div>
+		<button id="connect">Connect</button>
+	</div>
+
+	<div>
+		<input id="msg">
+		<button id="send">Send</button>
+	</div>
+
+	<div id="chat"></div>
+
+	<div id="remoteCursor">
+	</div>
+</div>
+
+<script>
+
+const ws = new WebSocket("wss://p01--roguelikeserver--by4b98kql5cr.code.run");
+
+const pc = new RTCPeerConnection({
+	iceServers: [
+		{ urls: "stun:stun.l.google.com:19302" }
+	]
+});
+
+let channel;
+
+const chat = document.getElementById("chat");
+const mainDiv = document.getElementById("main");
+
+function add(text){
+	chat.innerHTML += `<div>${text}</div>`;
+}
+
+let isMaster = false;
+
+document.getElementById("connect").onclick = async () => {
+	isMaster = true;
+
+	channel = pc.createDataChannel("cursor");
+	setupChannel(channel);
+
+	channel.onopen = () => {
+		const rect = mainDiv.getBoundingClientRect();
+
+		channel.send(JSON.stringify({
+			type: "size",
+			width: rect.width,
+			height: rect.height
+		}));
+	};
+
+	const offer = await pc.createOffer();
+	await pc.setLocalDescription(offer);
+
+	ws.send(JSON.stringify({
+		type: "offer",
+		offer
+	}));
+};
+
+pc.ondatachannel = e => {
+	channel = e.channel;
+	setupChannel(channel);
+};
+
+pc.onicecandidate = e => {
+	if (e.candidate) {
+		ws.send(JSON.stringify({
+			type: "candidate",
+			candidate: e.candidate
+		}));
+	}
+};
+
+ws.onmessage = async ({ data }) => {
+
+	const msg = JSON.parse(data);
+
+	if (msg.type === "chat") {
+		add("Peer: " + msg.text);
+	}
+
+	if (msg.type === "offer") {
+
+		await pc.setRemoteDescription(msg.offer);
+
+		const answer = await pc.createAnswer();
+
+		await pc.setLocalDescription(answer);
+
+		ws.send(JSON.stringify({
+			type: "answer",
+			answer
+		}));
+	}
+
+	if (msg.type === "answer") {
+		await pc.setRemoteDescription(msg.answer);
+	}
+
+	if (msg.type === "candidate") {
+		try {
+			await pc.addIceCandidate(msg.candidate);
+		} catch {}
+	}
+};
+
+document.getElementById("send").onclick = () => {
+
+	const text = document.getElementById("msg").value;
+
+	ws.send(JSON.stringify({
+		type: "chat",
+		text
+	}));
+
+	add("Me: " + text);
+};
+
+const CURSOR_SCALE = 1000;
+
+let targetX = 0, targetY = 0;
+let posX = 0, posY = 0;
+let velX = 0, velY = 0;
+
+function setupChannel(ch){
+	ch.onmessage = e => {
+		if(typeof e.data ==="string"){
+			const p = JSON.parse(e.data);
+
+			if (p.type === "size") {
+				mainDiv.style.width = p.width + "px";
+				mainDiv.style.height = p.height + "px";
+			}
+		}else{
+			const view = new Uint16Array(e.data);
+			
+			targetX = view[0] / CURSOR_SCALE * mainDiv.clientWidth;
+			targetY = view[1] / CURSOR_SCALE * mainDiv.clientHeight;
+			
+			if(posX == 0 && posY == 0){
+				posX = targetX;
+				posY = targetY;
+			}
+		}
+	};
+}
+
+function animate() {
+	const stiffness = 0.65;
+	const damping = 0.35;
+
+	velX += (targetX - posX) * stiffness;
+	velY += (targetY - posY) * stiffness;
+
+	velX *= damping;
+	velY *= damping;
+
+	posX += velX;
+	posY += velY;
+
+	remoteCursor.style.left = posX + "px";
+	remoteCursor.style.top = posY + "px";
+
+	requestAnimationFrame(animate);
+}
+animate();
+
+const CURSOR_FPS = 15;
+let mouseX = 0;
+let mouseY = 0;
+
+let lastSentX = 0;
+let lastSentY = 0;
+
+
+
+document.addEventListener("pointermove", e => {
+	const rect = mainDiv.getBoundingClientRect();
+
+	mouseX = e.clientX - rect.left;
+	mouseY = e.clientY - rect.top;
+});
+
+setInterval(sendCursor, 1000 / CURSOR_FPS);
+
+
+function sendCursor() {
+  if (!channel || channel.readyState !== "open") return;
+
+	if (Math.abs(mouseX - lastSentX) < 2 && Math.abs(mouseY - lastSentY) < 2) {
+		return;
+	}
+	
+	lastSentX = mouseX;
+	lastSentY = mouseY;
+  
+	const x = mouseX / mainDiv.clientWidth;
+	const y = mouseY / mainDiv.clientHeight;
+
+	const buf = new ArrayBuffer(4);
+	const view = new Uint16Array(buf);
+
+	view[0] = Math.round(x * CURSOR_SCALE);
+	view[1] = Math.round(y * CURSOR_SCALE);
+
+	channel.send(buf);
+}
+
+
+
+</script>
+
+</body>
+</html>
